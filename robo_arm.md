@@ -2,11 +2,12 @@
 
 5/6 DoF robotical arm implementation on ROS2 for Ulurover. This README clarify the progress of the arm.
 
-## (Planned) Packages
+## Packages
 
 - **panda_description:** URDF export of robotical arm.
 - **panda_moveit_config:** Launch files and controllers of robotical arm which was generated using moveit_servo.
-- **panda_servo_controller:** Joy/keyboard teleop controller of the robotical arm.
+- **moveit_servo:** Fork of moveit_servo package for ROS2 Humble.
+- **panda_servo_control:** Joy/keyboard teleop controller for the robotical arm.
 
 ## To-Do List
 
@@ -14,8 +15,13 @@
 - [x] Be able to plan & execute robotical ar0m poses.
 - [x] Be able to adjust poses/trajectories using C++.
 - [ ] Use moveit servo messages to manage robotical arm realtime.
-    - [ ] There will be three modes: IDLE, POSE, TRAJECTORY
-    - [ ] The latency should be too low.
+    - [x] There will be three modes: IDLE, POSE, TRAJECTORY
+    - [x] Keyboard control.
+    - [ ] Joystick control.
+    - [x] The latency should be too low between the key press and Rviz simulation.
+    - [ ] Gripper control.
+- [x] Test robo arm controls with obstacles.
+- [ ] Gazebo simulations for the tasks.
 - [ ] Create hardware communication flow using micro-ROS over UART.
 - [ ] Integrate real robotical arm of Ulurover to test with hardware.
 - [ ] Create PWM motor drivers for STM32.
