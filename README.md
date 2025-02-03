@@ -24,6 +24,7 @@
 - [ ] Gazebo simulations for the tasks.
 - [ ] Create hardware communication flow using micro-ROS over UART.
 - [ ] Integrate real robotical arm of Ulurover to test with hardware.
+- [ ] Integrate [IKFast](https://moveit.picknik.ai/humble/doc/examples/ikfast/ikfast_tutorial.html) kinematics solver plugin.
 - [ ] Create PWM motor drivers for STM32.
 - [ ] Manufacturing and testing of robotical arm.
     - [ ] Manufacturing part.
