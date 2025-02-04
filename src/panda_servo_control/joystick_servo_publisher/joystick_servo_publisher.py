@@ -3,6 +3,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from geometry_msgs.msg import TwistStamped
 from control_msgs.msg import JointJog
+from control_msgs.action import GripperCommand
 from std_srvs.srv import Trigger
 from moveit_msgs.msg import PlanningScene, CollisionObject
 from shape_msgs.msg import SolidPrimitive
@@ -12,6 +13,7 @@ import time
 from enum import Enum
 from rclpy.executors import ExternalShutdownException
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.action import ActionClient
 
 # Axis and button mapping
 class Axis:
@@ -50,6 +52,7 @@ EEF_FRAME_ID = "panda_hand"
 BASE_FRAME_ID = "panda_link0"
 ROBOT_JOINTS = ["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"]
 AXIS_DEFAULTS = {Button.LEFT_TRIGGER: 0.0, Button.RIGHT_TRIGGER: 0.0} # for xbox controller these values have to be 1.0
+GRIPPER_MAX = 0.05
 
 def axis_deadzone(axis_value):
     if abs(axis_value) < DEADZONE_RANGE:
@@ -95,6 +98,7 @@ class JoyToServoPub(Node):
     def __init__(self):
         super().__init__("joystick_servo_publisher")
         self.frame_to_publish = BASE_FRAME_ID
+        self.gripper = 0.0
 
         # Initialize subscribers and publishers
         self.joy_sub = self.create_subscription(Joy, JOY_TOPIC, self.joy_cb, 10)
@@ -102,14 +106,37 @@ class JoyToServoPub(Node):
         self.joint_pub = self.create_publisher(JointJog, JOINT_TOPIC, 10)
         self.collision_pub = self.create_publisher(PlanningScene, "/planning_scene", 10)
 
+        # Initialize action clients
+        self.gripper_action = ActionClient(self, GripperCommand, "/panda_hand_controller/gripper_cmd")
+        gripper_srv_status = self.gripper_action.wait_for_server(timeout_sec=5.0)
+        if not gripper_srv_status:
+            self.get_logger().error("Gripper action server not available")
+            raise RuntimeError("Gripper action server not available")
+
         # Check for the servo node and start it if it is not running
         self.servo_start_client = self.create_client(Trigger, "/servo_node/start_servo")
-        self.servo_start_client.wait_for_service(timeout_sec=1.0)
+        servo_srv_status = self.servo_start_client.wait_for_service(timeout_sec=5.0)
+        if not servo_srv_status:
+            self.get_logger().error("Servo service not available")
+            raise RuntimeError("Servo service not available")
         self.servo_start_client.call_async(Trigger.Request())
 
         # Start a thread to publish the collision scene (useful for testing, should be disabled on real robot)
         self.collision_pub_thread = threading.Thread(target=self.publish_collision_scene)
         self.collision_pub_thread.start()
+
+    def convert_joy_to_gripper_cmd(self, buttons, goal : GripperCommand.Goal):
+        val_pos = 0.0005 * (buttons[Button.RIGHT_BUMPER])
+        val_neg = -0.0005 * (buttons[Button.LEFT_BUMPER])
+        self.gripper += val_pos + val_neg
+        if self.gripper >= GRIPPER_MAX or self.gripper <= 0.0:
+            return
+
+        goal.command.position = self.gripper
+        goal.command.max_effort = 50.0 # arbitrary value
+        self.gripper_action.send_goal_async(goal)
+
+        return
 
     def publish_collision_scene(self):
         time.sleep(3)
@@ -177,6 +204,11 @@ class JoyToServoPub(Node):
         elif self.mode == ControllerMode.CARTESIAN: # Control linear and angular velocities if mode is CARTESIAN
             convert_joy_to_cartesian_cmd(msg.axes, msg.buttons, twist_msg)
             self.twist_pub.publish(twist_msg)
+
+        # Control gripper
+        if msg.buttons[Button.RIGHT_BUMPER] or msg.buttons[Button.LEFT_BUMPER]:
+            gripper_goal = GripperCommand.Goal()
+            self.convert_joy_to_gripper_cmd(msg.buttons, gripper_goal)
         
         return
 
