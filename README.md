@@ -17,7 +17,9 @@
 - [ ] Use moveit servo messages to manage robotical arm realtime.
     - [x] There will be three modes: IDLE, POSE, TRAJECTORY
     - [x] Keyboard control.
-    - [ ] Joystick control.
+    - [x] Joystick control. (works with DragonRise gamepad driver, needs some mapping stuff for other gamepads)
+        - [ ] Allow different configurations.
+        - [ ] Check for deadzone.
     - [x] The latency should be too low between the key press and Rviz simulation.
     - [ ] Gripper control.
 - [x] Test robo arm controls with obstacles.

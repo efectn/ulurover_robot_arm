@@ -24,7 +24,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'servo_keyboard = servo_keyboard.servo_keyboard:main'
+            'servo_keyboard = servo_keyboard.servo_keyboard:main',
+            'joystick_servo_publisher = joystick_servo_publisher.joystick_servo_publisher:main'
         ],
     },
 )

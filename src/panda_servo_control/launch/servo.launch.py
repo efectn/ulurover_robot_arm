@@ -121,11 +121,12 @@ def generate_launch_description():
                 name="static_tf2_broadcaster",
                 parameters=[{"child_frame_id": "/panda_link0", "frame_id": "/world"}],
             ),
-            ComposableNode(
-                package="moveit_servo",
-                plugin="moveit_servo::JoyToServoPub",
-                name="controller_to_servo_node",
-            ),
+            # component_container_mt does not support python components yet
+            #ComposableNode(
+            #    package="panda_servo_control",
+            #    plugin="joystick_servo_publisher",
+            #    name="joystick_servo_publisher",
+            #),
             ComposableNode(
                 package="joy",
                 plugin="joy::Joy",
@@ -148,6 +149,12 @@ def generate_launch_description():
         output="screen",
     )
 
+    joystick_servo_publisher_node = Node(
+        package="panda_servo_control",
+        executable="joystick_servo_publisher",
+        output="screen",
+    )
+
     return LaunchDescription(
         [
             rviz_node,
@@ -155,6 +162,7 @@ def generate_launch_description():
             joint_state_broadcaster_spawner,
             panda_arm_controller_spawner,
             servo_node,
+            joystick_servo_publisher_node,
             container,
         ]
     )
