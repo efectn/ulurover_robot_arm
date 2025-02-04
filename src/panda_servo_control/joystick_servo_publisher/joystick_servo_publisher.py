@@ -42,6 +42,7 @@ class ControllerMode(Enum):
     CARTESIAN = 2
 
 # Configurations
+DEADZONE_RANGE = 0.25
 JOY_TOPIC = "/joy"
 TWIST_TOPIC = "/servo_node/delta_twist_cmds"
 JOINT_TOPIC = "/servo_node/delta_joint_cmds"
@@ -50,9 +51,14 @@ BASE_FRAME_ID = "panda_link0"
 ROBOT_JOINTS = ["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"]
 AXIS_DEFAULTS = {Button.LEFT_TRIGGER: 0.0, Button.RIGHT_TRIGGER: 0.0} # for xbox controller these values have to be 1.0
 
+def axis_deadzone(axis_value):
+    if abs(axis_value) < DEADZONE_RANGE:
+        return 0.0
+    return axis_value
+
 def convert_joy_to_cartesian_cmd(axes, buttons, msg : TwistStamped):
-    msg.twist.linear.z = axes[Axis.RIGHT_STICK_Y]
-    msg.twist.linear.y = axes[Axis.RIGHT_STICK_X]
+    msg.twist.linear.z = axis_deadzone(axes[Axis.RIGHT_STICK_Y])
+    msg.twist.linear.y = axis_deadzone(axes[Axis.RIGHT_STICK_X])
 
     # this is necessary for Xbox controller since the triggers are not zeroed when not pressed
     # i don't think it is necessary for other controllers but it doesn't hurt
@@ -60,23 +66,23 @@ def convert_joy_to_cartesian_cmd(axes, buttons, msg : TwistStamped):
     lin_x_left = 0.5 * (buttons[Button.LEFT_TRIGGER] - AXIS_DEFAULTS[Button.LEFT_TRIGGER])
     msg.twist.linear.x = lin_x_right + lin_x_left
 
-    msg.twist.angular.y = axes[Axis.LEFT_STICK_Y]
-    msg.twist.angular.x = axes[Axis.LEFT_STICK_X]
+    msg.twist.angular.y = axis_deadzone(axes[Axis.LEFT_STICK_Y])
+    msg.twist.angular.x = axis_deadzone(axes[Axis.LEFT_STICK_X])
     
     #msg.twist.angular.z = float(buttons[Button.RIGHT_BUMPER] - buttons[Button.LEFT_BUMPER])
-    msg.twist.angular.z = 0.5 * axes[Axis.D_PAD_X]
+    msg.twist.angular.z = 0.5 * axis_deadzone(axes[Axis.D_PAD_X])
 
     return
 
 def convert_joy_to_joint_cmd(axes, buttons, msg : JointJog):
     msg.joint_names = ROBOT_JOINTS
     msg.velocities = [0.0] * 7
-    msg.velocities[0] = 0.5 * axes[Axis.LEFT_STICK_X] # Joint 1
-    msg.velocities[1] = 0.5 * axes[Axis.LEFT_STICK_Y] # Joint 2
-    msg.velocities[2] = 0.5 * axes[Axis.RIGHT_STICK_X] # Joint 3
-    msg.velocities[3] = 0.5 * axes[Axis.RIGHT_STICK_Y] # Joint 4
-    msg.velocities[4] = 0.5 * axes[Axis.D_PAD_X] # Joint 5
-    msg.velocities[5] = 0.5 * axes[Axis.D_PAD_Y] # Joint 6
+    msg.velocities[0] = 0.5 * axis_deadzone(axes[Axis.LEFT_STICK_X]) # Joint 1
+    msg.velocities[1] = 0.5 * axis_deadzone(axes[Axis.LEFT_STICK_Y]) # Joint 2
+    msg.velocities[2] = 0.5 * axis_deadzone(axes[Axis.RIGHT_STICK_X]) # Joint 3
+    msg.velocities[3] = 0.5 * axis_deadzone(axes[Axis.RIGHT_STICK_Y]) # Joint 4
+    msg.velocities[4] = 0.5 * axis_deadzone(axes[Axis.D_PAD_X]) # Joint 5
+    msg.velocities[5] = 0.5 * axis_deadzone(axes[Axis.D_PAD_Y]) # Joint 6
 
     joint_7_right = -0.5 * (buttons[Button.RIGHT_TRIGGER] - AXIS_DEFAULTS[Button.RIGHT_TRIGGER])
     joint_7_left = 0.5 * (buttons[Button.LEFT_TRIGGER] - AXIS_DEFAULTS[Button.LEFT_TRIGGER])
