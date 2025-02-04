@@ -2,11 +2,14 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped, Vector3
 from control_msgs.msg import JointJog
+from control_msgs.action import GripperCommand
+from sensor_msgs.msg import JointState
 from enum import Enum
 import termios, sys
 import tty, select
 import signal
 from rclpy.parameter import Parameter as Param
+from rclpy.action import ActionClient
 
 # Welcome message
 msg = """
@@ -36,31 +39,35 @@ l: Change velocity control mode (LINEAR/ANGULAR)
 9: Increase joint 7 angle (JOINT mode)
 v: reverse the direction of the joint (JOINT mode)
 
+g: Close the gripper
+h: Open the gripper
+
 q: Quit the program
 """
 
 # Arm specific parameters
-alpha = 0.5
-frame_id = 'panda_link0'
-robot_joints = ["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"]
+ALPHA = 0.5
+GRIPPER_MAX = 0.05
+FRAME_ID = 'panda_link0'
+ROBOT_JOINTS = ["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"]
 
-key_mapping_cartesian = {
-    'w': [alpha, 0.0, 0.0],
-    's': [-alpha, 0.0, 0.0],
-    'a': [0.0, alpha, 0.0],
-    'd': [0.0, -alpha, 0.0],
-    'r': [0.0, 0.0, alpha],
-    'f': [0.0, 0.0, -alpha],
+KEY_MAPPING_CARTESIAN = {
+    'w': [ALPHA, 0.0, 0.0],
+    's': [-ALPHA, 0.0, 0.0],
+    'a': [0.0, ALPHA, 0.0],
+    'd': [0.0, -ALPHA, 0.0],
+    'r': [0.0, 0.0, ALPHA],
+    'f': [0.0, 0.0, -ALPHA],
 }
 
-key_mapping_joint = {
-    '3': [alpha, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    '4': [0.0, alpha, 0.0, 0.0, 0.0, 0.0, 0.0],
-    '5': [0.0, 0.0, alpha, 0.0, 0.0, 0.0, 0.0],
-    '6': [0.0, 0.0, 0.0, alpha, 0.0, 0.0, 0.0],
-    '7': [0.0, 0.0, 0.0, 0.0, alpha, 0.0, 0.0],
-    '8': [0.0, 0.0, 0.0, 0.0, 0.0, alpha, 0.0],
-    '9': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, alpha],
+KEY_MAPPING_JOINT = {
+    '3': [ALPHA, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    '4': [0.0, ALPHA, 0.0, 0.0, 0.0, 0.0, 0.0],
+    '5': [0.0, 0.0, ALPHA, 0.0, 0.0, 0.0, 0.0],
+    '6': [0.0, 0.0, 0.0, ALPHA, 0.0, 0.0, 0.0],
+    '7': [0.0, 0.0, 0.0, 0.0, ALPHA, 0.0, 0.0],
+    '8': [0.0, 0.0, 0.0, 0.0, 0.0, ALPHA, 0.0],
+    '9': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ALPHA],
 }
 
 # From https://github.com/ROBOTIS-GIT/turtlebot3/blob/main/turtlebot3_teleop/turtlebot3_teleop/script/teleop_keyboard.py
@@ -90,6 +97,7 @@ class ServoControl(Node):
     controller_mode = ControllerMode.CARTESIAN # Default mode
     vel_mode = VelocityControl.LINEAR # Default velocity control mode
     joint_multiplier = 1.0 # Default multiplier for joint control
+    gripper = 0.0
 
     def change_controller_mode(self, mode : ControllerMode):
         self.controller_mode = mode
@@ -101,7 +109,20 @@ class ServoControl(Node):
 
     def log_debug(self, msg):
         if self.debug:
-            self.get_logger().info(msg)   
+            self.get_logger().info(msg)
+
+    def send_gripper_cmd(self, process : list[2], goal : GripperCommand.Goal):
+        val_pos = 0.0005 * (process[0])
+        val_neg = -0.0005 * (process[1])
+        self.gripper += val_pos + val_neg
+        if self.gripper >= GRIPPER_MAX or self.gripper <= 0.0:
+            return
+
+        goal.command.position = self.gripper
+        goal.command.max_effort = 50.0 # arbitrary value
+        self.gripper_action.send_goal_async(goal)
+
+        return
 
     def __init__(self):
         super().__init__('servo_keyboard',                     
@@ -114,6 +135,13 @@ class ServoControl(Node):
         # Create publishers
         self.cartesian_servo_publisher = self.create_publisher(TwistStamped, '/servo_node/delta_twist_cmds', 10)
         self.joint_servo_publisher = self.create_publisher(JointJog, '/servo_node/delta_joint_cmds', 10)
+
+        # Initialize action clients
+        self.gripper_action = ActionClient(self, GripperCommand, "/panda_hand_controller/gripper_cmd")
+        gripper_srv_status = self.gripper_action.wait_for_server(timeout_sec=5.0)
+        if not gripper_srv_status:
+            self.get_logger().error("Gripper action server not available")
+            raise RuntimeError("Gripper action server not available")
 
         # Print info message
         self.get_logger().info(msg)
@@ -132,11 +160,11 @@ class ServoControl(Node):
             while rclpy.ok():
                 twistMsg = TwistStamped()
                 twistMsg.header.stamp = self.get_clock().now().to_msg()
-                twistMsg.header.frame_id = frame_id
+                twistMsg.header.frame_id = FRAME_ID
 
                 jointMsg = JointJog()
                 jointMsg.header.stamp = self.get_clock().now().to_msg()
-                jointMsg.header.frame_id = frame_id
+                jointMsg.header.frame_id = FRAME_ID
 
                 sendTwistMsg = False
                 sendJointMsg = False
@@ -156,18 +184,21 @@ class ServoControl(Node):
                     self.get_logger().info('Joint multiplier changed to: {}'.format(self.joint_multiplier))
                 elif key == 'q' or key == '\x03':
                     break
-                elif key in key_mapping_cartesian and self.controller_mode == ControllerMode.CARTESIAN:
+                elif key == 'g' or key == 'h':
+                    goal = GripperCommand.Goal()
+                    self.send_gripper_cmd([key == 'h', key == 'g'], goal)
+                elif key in KEY_MAPPING_CARTESIAN and self.controller_mode == ControllerMode.CARTESIAN:
                     vectors : Vector3 = twistMsg.twist.linear
                     if self.vel_mode == VelocityControl.ANGULAR:
                         vectors = twistMsg.twist.angular
 
-                    vectors.x = key_mapping_cartesian[key][0]
-                    vectors.y = key_mapping_cartesian[key][1]
-                    vectors.z = key_mapping_cartesian[key][2]
+                    vectors.x = KEY_MAPPING_CARTESIAN[key][0]
+                    vectors.y = KEY_MAPPING_CARTESIAN[key][1]
+                    vectors.z = KEY_MAPPING_CARTESIAN[key][2]
                     sendTwistMsg = True
-                elif key in key_mapping_joint and self.controller_mode == ControllerMode.JOINT:
-                    jointMsg.velocities = [x * self.joint_multiplier for x in key_mapping_joint[key]]
-                    jointMsg.joint_names = robot_joints
+                elif key in KEY_MAPPING_JOINT and self.controller_mode == ControllerMode.JOINT:
+                    jointMsg.velocities = [x * self.joint_multiplier for x in KEY_MAPPING_JOINT[key]]
+                    jointMsg.joint_names = ROBOT_JOINTS
                     sendJointMsg = True
                 else:
                     if key != '':

@@ -22,7 +22,7 @@
         - [ ] Allow different configurations.
         - [x] Check for deadzone.
     - [x] The latency should be too low between the key press and Rviz simulation.
-    - [ ] Gripper control.
+    - [x] Gripper control.
 - [x] Test robo arm controls with obstacles.
 - [ ] Gazebo simulations for the tasks.
 - [ ] Create hardware communication flow using micro-ROS over UART.
