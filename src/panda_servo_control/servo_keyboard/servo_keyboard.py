@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TwistStamped, Vector3
 from control_msgs.msg import JointJog
 from enum import Enum
 import termios, sys
@@ -25,6 +25,7 @@ a: Move left in y direction (CARTESIAN mode)
 d: Move right in y direction (CARTESIAN mode)
 r: Move up in z direction (CARTESIAN mode)
 f: Move down in z direction (CARTESIAN mode)
+l: Change velocity control mode (LINEAR/ANGULAR)
 
 3: Increase joint 1 angle (JOINT mode)
 4: Decrease joint 2 angle (JOINT mode)
@@ -80,13 +81,23 @@ class ControllerMode(Enum):
     JOINT = 1
     CARTESIAN = 2
 
+# Velocity control modes
+class VelocityControl(Enum):
+    LINEAR = 0
+    ANGULAR = 1
+
 class ServoControl(Node):
-    mode = ControllerMode.CARTESIAN # Default mode
+    controller_mode = ControllerMode.CARTESIAN # Default mode
+    vel_mode = VelocityControl.LINEAR # Default velocity control mode
     joint_multiplier = 1.0 # Default multiplier for joint control
 
-    def change_mode(self, mode : ControllerMode):
-        self.mode = mode
-        self.get_logger().info('Mode changed to: {}'.format(mode))     
+    def change_controller_mode(self, mode : ControllerMode):
+        self.controller_mode = mode
+        self.get_logger().info('Mode changed to: {}'.format(mode))  
+
+    def change_vel_mode(self):
+        self.vel_mode = VelocityControl((self.vel_mode.value+1)%2)
+        self.get_logger().info('Velocity control mode changed to: {}'.format(self.vel_mode))   
 
     def log_debug(self, msg):
         if self.debug:
@@ -133,22 +144,28 @@ class ServoControl(Node):
                 # Handle key press
                 key = get_key(settings)
                 if key == '0':
-                    self.change_mode(ControllerMode.IDLE)
+                    self.change_controller_mode(ControllerMode.IDLE)
                 elif key == '1':
-                    self.change_mode(ControllerMode.JOINT)
+                    self.change_controller_mode(ControllerMode.JOINT)
                 elif key == '2':
-                    self.change_mode(ControllerMode.CARTESIAN)
+                    self.change_controller_mode(ControllerMode.CARTESIAN)
+                elif key == 'l':
+                    self.change_vel_mode()
                 elif key == 'v':
                     self.joint_multiplier *= -1
-                    self.log_debug('Joint multiplier changed to: {}'.format(self.joint_multiplier))
+                    self.get_logger().info('Joint multiplier changed to: {}'.format(self.joint_multiplier))
                 elif key == 'q' or key == '\x03':
                     break
-                elif key in key_mapping_cartesian and self.mode == ControllerMode.CARTESIAN:
-                    twistMsg.twist.linear.x = key_mapping_cartesian[key][0]
-                    twistMsg.twist.linear.y = key_mapping_cartesian[key][1]
-                    twistMsg.twist.linear.z = key_mapping_cartesian[key][2]
+                elif key in key_mapping_cartesian and self.controller_mode == ControllerMode.CARTESIAN:
+                    vectors : Vector3 = twistMsg.twist.linear
+                    if self.vel_mode == VelocityControl.ANGULAR:
+                        vectors = twistMsg.twist.angular
+
+                    vectors.x = key_mapping_cartesian[key][0]
+                    vectors.y = key_mapping_cartesian[key][1]
+                    vectors.z = key_mapping_cartesian[key][2]
                     sendTwistMsg = True
-                elif key in key_mapping_joint and self.mode == ControllerMode.JOINT:
+                elif key in key_mapping_joint and self.controller_mode == ControllerMode.JOINT:
                     jointMsg.velocities = [x * self.joint_multiplier for x in key_mapping_joint[key]]
                     jointMsg.joint_names = robot_joints
                     sendJointMsg = True
@@ -157,10 +174,10 @@ class ServoControl(Node):
                         self.log_debug("Invalid key: {}".format(key))
                 
                 # Send relavanet message
-                if self.mode == ControllerMode.CARTESIAN and sendTwistMsg:
+                if self.controller_mode == ControllerMode.CARTESIAN and sendTwistMsg:
                     self.cartesian_servo_publisher.publish(twistMsg)
                     self.log_debug('Publishing: {}'.format(twistMsg.twist))
-                elif self.mode == ControllerMode.JOINT and sendJointMsg:
+                elif self.controller_mode == ControllerMode.JOINT and sendJointMsg:
                     self.joint_servo_publisher.publish(jointMsg)
                     self.log_debug('Publishing: {}'.format(jointMsg.velocities))
         except Exception as e:
