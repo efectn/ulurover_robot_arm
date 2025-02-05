@@ -14,12 +14,12 @@
 - [x] Generate moveit_config for Panda robotical arm using Moveit2 setup assistant.
 - [x] Be able to plan & execute robotical ar0m poses.
 - [x] Be able to adjust poses/trajectories using C++.
-- [ ] Use moveit servo messages to manage robotical arm realtime.
+- [x] Use moveit servo messages to manage robotical arm realtime.
     - [x] There will be three modes: IDLE, POSE, TRAJECTORY
     - [x] Keyboard control.
         - [x] Angular control.
     - [x] Joystick control. (works with DragonRise gamepad driver, needs some mapping stuff for other gamepads)
-        - [ ] Allow different configurations.
+        - [x] Allow different configurations.
         - [x] Check for deadzone.
     - [x] The latency should be too low between the key press and Rviz simulation.
     - [x] Gripper control.

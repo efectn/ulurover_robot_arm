@@ -1,0 +1,93 @@
+topics:
+  joy_topic: "/joy"
+  planning_scene_topic: "/planning_scene"
+  gripper_cmd_topic: /panda_hand_controller/gripper_cmd
+  servo_start_topic: "/servo_node/start_servo"
+  cartesian_command_in_topic: "/servo_node/delta_twist_cmds"
+  joint_command_in_topic: "/servo_node/delta_joint_cmds"
+
+robot:
+  end_effector_frame: "panda_hand"
+  base_frame: "panda_link0"
+  joint_names:
+    - "panda_joint1"
+    - "panda_joint2"
+    - "panda_joint3"
+    - "panda_joint4"
+    - "panda_joint5"
+    - "panda_joint6"
+    - "panda_joint7"
+  gripper:
+    joint_name: "panda_finger_joint1"
+    max_opening: 0.04
+    min_opening: 0.0
+
+gamepad:
+  deadzone: 0.25
+  velocity_multiplier: 0.5
+  gripper_velocity_multiplier: 0.0005
+  functions:
+    mode_idle:
+      type: "button"
+      index: 0
+    mode_cartesian:
+      type: "button"
+      index: 2
+    mode_joint:
+      type: "button"
+      index: 1
+    gripper_open:
+      type: "button"
+      index: 5
+    gripper_close: 
+      type: "button"
+      index: 4
+    cartesian_x_axis_angular:
+      type: "axis"
+      index: 0
+    cartesian_y_axis_angular:
+      type: "axis"
+      index: 1
+    cartesian_z_axis_angular:
+      type: "axis"
+      index: 4
+    cartesian_x_axis_linear_right:
+      type: "button" # axis for xbox
+      default: 0.0 # 1.0 for xbox
+      index: 7
+    cartesian_x_axis_linear_left:
+      type: "button" # axis for xbox
+      default: 0.0 # 1.0 for xbox
+      index: 6
+    cartesian_y_axis_linear:
+      type: "axis"
+      index: 2
+    cartesian_z_axis_linear:
+      type: "axis"
+      index: 3
+    joint_1:
+      type: "axis"
+      index: 0
+    joint_2:
+      type: "axis"
+      index: 1
+    joint_3:
+      type: "axis"
+      index: 2
+    joint_4:
+      type: "axis"
+      index: 3
+    joint_5:
+      type: "axis"
+      index: 4 
+    joint_6:
+      type: "axis"
+      index: 5
+    joint_7_right:
+      type: "button" # axis for xbox
+      default: 0.0 # 1.0 for xbox
+      index: 7
+    joint_7_left:
+      type: "button" # axis for xbox
+      default: 0.0 # 1.0 for xbox
+      index: 6

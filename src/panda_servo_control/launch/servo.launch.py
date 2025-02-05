@@ -155,9 +155,11 @@ def generate_launch_description():
         output="screen",
     )
 
+    joystick_servo_publisher_params = load_yaml("panda_servo_control", "config/joystick_servo_publisher.yaml")
     joystick_servo_publisher_node = Node(
         package="panda_servo_control",
         executable="joystick_servo_publisher",
+        parameters=[joystick_servo_publisher_params],
         output="screen",
     )
 

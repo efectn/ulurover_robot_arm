@@ -15,106 +15,176 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionClient
 
-# Axis and button mapping
-class Axis:
-    LEFT_STICK_X = 0
-    LEFT_STICK_Y = 1
-    RIGHT_STICK_X = 2
-    RIGHT_STICK_Y = 3
-    D_PAD_X = 4
-    D_PAD_Y = 5
-
-class Button:
-    A = 2
-    B = 1
-    X = 3
-    Y = 0
-    LEFT_BUMPER = 4
-    RIGHT_BUMPER = 5
-    MENU = 9 # start
-    HOME = 8 # select
-    LEFT_STICK_CLICK = 9
-    RIGHT_STICK_CLICK = 10
-    LEFT_TRIGGER = 6
-    RIGHT_TRIGGER = 7
-
 class ControllerMode(Enum):
     IDLE = 0
     JOINT = 1
     CARTESIAN = 2
 
-# Configurations
-DEADZONE_RANGE = 0.25
-JOY_TOPIC = "/joy"
-TWIST_TOPIC = "/servo_node/delta_twist_cmds"
-JOINT_TOPIC = "/servo_node/delta_joint_cmds"
-EEF_FRAME_ID = "panda_hand"
-BASE_FRAME_ID = "panda_link0"
-ROBOT_JOINTS = ["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"]
-AXIS_DEFAULTS = {Button.LEFT_TRIGGER: 0.0, Button.RIGHT_TRIGGER: 0.0} # for xbox controller these values have to be 1.0
-GRIPPER_MAX = 0.05
-
-def axis_deadzone(axis_value):
-    if abs(axis_value) < DEADZONE_RANGE:
-        return 0.0
-    return axis_value
-
-def convert_joy_to_cartesian_cmd(axes, buttons, msg : TwistStamped):
-    msg.twist.linear.z = axis_deadzone(axes[Axis.RIGHT_STICK_Y])
-    msg.twist.linear.y = axis_deadzone(axes[Axis.RIGHT_STICK_X])
-
-    # this is necessary for Xbox controller since the triggers are not zeroed when not pressed
-    # i don't think it is necessary for other controllers but it doesn't hurt
-    lin_x_right = -0.5 * (buttons[Button.RIGHT_TRIGGER] - AXIS_DEFAULTS[Button.RIGHT_TRIGGER])
-    lin_x_left = 0.5 * (buttons[Button.LEFT_TRIGGER] - AXIS_DEFAULTS[Button.LEFT_TRIGGER])
-    msg.twist.linear.x = lin_x_right + lin_x_left
-
-    msg.twist.angular.y = axis_deadzone(axes[Axis.LEFT_STICK_Y])
-    msg.twist.angular.x = axis_deadzone(axes[Axis.LEFT_STICK_X])
-    
-    #msg.twist.angular.z = float(buttons[Button.RIGHT_BUMPER] - buttons[Button.LEFT_BUMPER])
-    msg.twist.angular.z = 0.5 * axis_deadzone(axes[Axis.D_PAD_X])
-
-    return
-
-def convert_joy_to_joint_cmd(axes, buttons, msg : JointJog):
-    msg.joint_names = ROBOT_JOINTS
-    msg.velocities = [0.0] * 7
-    msg.velocities[0] = 0.5 * axis_deadzone(axes[Axis.LEFT_STICK_X]) # Joint 1
-    msg.velocities[1] = 0.5 * axis_deadzone(axes[Axis.LEFT_STICK_Y]) # Joint 2
-    msg.velocities[2] = 0.5 * axis_deadzone(axes[Axis.RIGHT_STICK_X]) # Joint 3
-    msg.velocities[3] = 0.5 * axis_deadzone(axes[Axis.RIGHT_STICK_Y]) # Joint 4
-    msg.velocities[4] = 0.5 * axis_deadzone(axes[Axis.D_PAD_X]) # Joint 5
-    msg.velocities[5] = 0.5 * axis_deadzone(axes[Axis.D_PAD_Y]) # Joint 6
-
-    joint_7_right = -0.5 * (buttons[Button.RIGHT_TRIGGER] - AXIS_DEFAULTS[Button.RIGHT_TRIGGER])
-    joint_7_left = 0.5 * (buttons[Button.LEFT_TRIGGER] - AXIS_DEFAULTS[Button.LEFT_TRIGGER])
-    msg.velocities[6] = joint_7_right + joint_7_left # Joint 7
-    
-    return
-
 class JoyToServoPub(Node):
-    mode = ControllerMode.CARTESIAN
+    def axis_deadzone(self, axis_value):
+        deadzone = self.get_gamepad_property("deadzone")
+        if abs(axis_value) < deadzone:
+            return 0.0
+        return axis_value
+
+    def get_btn_axis(self, msg : Joy, name : str):
+        func_type = self.get_parameter(f'gamepad.functions.{name}.type').value
+        func_index = self.get_parameter(f'gamepad.functions.{name}.index').value
+
+        if func_type == "axis":
+            return self.axis_deadzone(msg.axes[func_index])
+        elif func_type == "button":
+            return msg.buttons[func_index]
+        else:
+            return None
+    
+    def get_default_btn_axis(self, name : str):
+        return self.get_parameter(f'gamepad.functions.{name}.default').value
+    
+    def get_topic(self, name : str):
+        return self.get_parameter(f'topics.{name}').value
+    
+    def get_robot_property(self, name : str):
+        return self.get_parameter(f'robot.{name}').value
+    
+    def get_gamepad_property(self, name : str):
+        return self.get_parameter(f'gamepad.{name}').value
+        
+    def convert_joy_to_cartesian_cmd(self, joy_msg : Joy, msg : TwistStamped):
+        msg.twist.linear.z = self.get_btn_axis(joy_msg, "cartesian_z_axis_linear")
+        msg.twist.linear.y = self.get_btn_axis(joy_msg, "cartesian_y_axis_linear")
+
+        # this is necessary for Xbox controller since the triggers are not zeroed when not pressed
+        # i don't think it is necessary for other controllers but it doesn't hurt
+        lin_x_right = -self.get_gamepad_property("velocity_multiplier") * (self.get_btn_axis(joy_msg, "cartesian_x_axis_linear_right") - self.get_default_btn_axis("cartesian_x_axis_linear_right"))
+        lin_x_left = self.get_gamepad_property("velocity_multiplier") * (self.get_btn_axis(joy_msg, "cartesian_x_axis_linear_left") - self.get_default_btn_axis("cartesian_x_axis_linear_left"))
+        msg.twist.linear.x = lin_x_right + lin_x_left
+
+        msg.twist.angular.y = self.get_btn_axis(joy_msg, "cartesian_x_axis_angular")
+        msg.twist.angular.x = self.get_btn_axis(joy_msg, "cartesian_y_axis_angular")
+    
+        #msg.twist.angular.z = float(buttons[Button.RIGHT_BUMPER] - buttons[Button.LEFT_BUMPER])
+        msg.twist.angular.z = self.get_gamepad_property("velocity_multiplier") * self.get_btn_axis(joy_msg, "cartesian_z_axis_angular")
+
+        return
+
+    def convert_joy_to_joint_cmd(self, joy_msg : Joy, msg : JointJog):
+        msg.joint_names = self.get_robot_property("joint_names")
+        msg.velocities = [0.0] * 7
+        msg.velocities[0] = self.get_gamepad_property("velocity_multiplier") * self.get_btn_axis(joy_msg, "joint_1") # Joint 1
+        msg.velocities[1] = self.get_gamepad_property("velocity_multiplier") * self.get_btn_axis(joy_msg, "joint_2") # Joint 2
+        msg.velocities[2] = self.get_gamepad_property("velocity_multiplier") * self.get_btn_axis(joy_msg, "joint_3") # Joint 3
+        msg.velocities[3] = self.get_gamepad_property("velocity_multiplier") * self.get_btn_axis(joy_msg, "joint_4") # Joint 4
+        msg.velocities[4] = self.get_gamepad_property("velocity_multiplier") * self.get_btn_axis(joy_msg, "joint_5") # Joint 5
+        msg.velocities[5] = self.get_gamepad_property("velocity_multiplier") * self.get_btn_axis(joy_msg, "joint_6") # Joint 6
+
+        joint_7_right = -self.get_gamepad_property("velocity_multiplier") * (self.get_btn_axis(joy_msg, "joint_7_right") - self.get_default_btn_axis("joint_7_right"))
+        joint_7_left = self.get_gamepad_property("velocity_multiplier") * (self.get_btn_axis(joy_msg, "joint_7_left") - self.get_default_btn_axis("joint_7_left"))
+        msg.velocities[6] = joint_7_right + joint_7_left # Joint 7
+    
+        return
+    
+    def init_params(self):
+        # Declare topics
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('topics.joy_topic', '/joy'),
+                ('topics.planning_scene_topic', '/planning_scene'),
+                ('topics.gripper_cmd_topic', '/panda_hand_controller/gripper_cmd'),
+                ('topics.servo_start_topic', '/servo_node/start_servo'),
+                ('topics.cartesian_command_in_topic', '/servo_node/delta_twist_cmds'),
+                ('topics.joint_command_in_topic', '/servo_node/delta_joint_cmds'),
+            ]
+        )
+
+        # Declare robot parameters
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('robot.end_effector_frame', 'panda_hand'),
+                ('robot.base_frame', 'panda_link0'),
+                ('robot.joint_names', [
+                    'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4',
+                    'panda_joint5', 'panda_joint6', 'panda_joint7'
+                ]),
+                ('robot.gripper.joint_name', 'panda_finger_joint1'),
+                ('robot.gripper.max_opening', 0.04),
+                ('robot.gripper.min_opening', 0.0),
+            ]
+        )
+        
+        # Declare gamepad parameters
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('gamepad.deadzone', 0.25),
+                ('gamepad.velocity_multiplier', 0.5),
+                ('gamepad.gripper_velocity_multiplier', 0.0005),
+            ]
+        )
+
+        # Declare gamepad functions
+        functions = {
+            'mode_idle': ("button", 0),
+            'mode_cartesian': ("button", 2),
+            'mode_joint': ("button", 1),
+            'gripper_open': ("button", 5),
+            'gripper_close': ("button", 4),
+            'cartesian_x_axis_angular': ("axis", 0),
+            'cartesian_y_axis_angular': ("axis", 1),
+            'cartesian_z_axis_angular': ("axis", 4),
+            'cartesian_x_axis_linear_right': ("button", 7, 0.0),
+            'cartesian_x_axis_linear_left': ("button", 6, 0.0),
+            'cartesian_y_axis_linear': ("axis", 2),
+            'cartesian_z_axis_linear': ("axis", 3),
+            'joint_1': ("axis", 0),
+            'joint_2': ("axis", 1),
+            'joint_3': ("axis", 2),
+            'joint_4': ("axis", 3),
+            'joint_5': ("axis", 4),
+            'joint_6': ("axis", 5),
+            'joint_7_right': ("button", 7, 0.0),
+            'joint_7_left': ("button", 6, 0.0),
+        }
+        
+        for key, value in functions.items():
+            if len(value) == 2:
+                param_type, index = value
+                self.declare_parameter(f'gamepad.functions.{key}.type', param_type)
+                self.declare_parameter(f'gamepad.functions.{key}.index', index)
+            elif len(value) == 3:
+                param_type, index, default = value
+                self.declare_parameter(f'gamepad.functions.{key}.type', param_type)
+                self.declare_parameter(f'gamepad.functions.{key}.index', index)
+                self.declare_parameter(f'gamepad.functions.{key}.default', default)
+
     def __init__(self):
         super().__init__("joystick_servo_publisher")
-        self.frame_to_publish = BASE_FRAME_ID
-        self.gripper = 0.0
+
+        # Initialize parameters
+        self.init_params()
+
+        # Initialize variables
+        self.mode = ControllerMode.CARTESIAN
+        self.frame_to_publish = self.get_robot_property("base_frame")
+        self.gripper = self.get_robot_property("gripper.min_opening")
 
         # Initialize subscribers and publishers
-        self.joy_sub = self.create_subscription(Joy, JOY_TOPIC, self.joy_cb, 10)
-        self.twist_pub = self.create_publisher(TwistStamped, TWIST_TOPIC, 10)
-        self.joint_pub = self.create_publisher(JointJog, JOINT_TOPIC, 10)
-        self.collision_pub = self.create_publisher(PlanningScene, "/planning_scene", 10)
+        self.joy_sub = self.create_subscription(Joy, self.get_topic("joy_topic"), self.joy_cb, 10)
+        self.twist_pub = self.create_publisher(TwistStamped, self.get_topic("cartesian_command_in_topic"), 10)
+        self.joint_pub = self.create_publisher(JointJog, self.get_topic("joint_command_in_topic"), 10)
+        self.collision_pub = self.create_publisher(PlanningScene, self.get_topic("planning_scene_topic"), 10)
 
         # Initialize action clients
-        self.gripper_action = ActionClient(self, GripperCommand, "/panda_hand_controller/gripper_cmd")
+        self.gripper_action = ActionClient(self, GripperCommand, self.get_topic("gripper_cmd_topic"))
         gripper_srv_status = self.gripper_action.wait_for_server(timeout_sec=5.0)
         if not gripper_srv_status:
             self.get_logger().error("Gripper action server not available")
             raise RuntimeError("Gripper action server not available")
 
         # Check for the servo node and start it if it is not running
-        self.servo_start_client = self.create_client(Trigger, "/servo_node/start_servo")
+        self.servo_start_client = self.create_client(Trigger, self.get_topic("servo_start_topic"))
         servo_srv_status = self.servo_start_client.wait_for_service(timeout_sec=5.0)
         if not servo_srv_status:
             self.get_logger().error("Servo service not available")
@@ -125,11 +195,11 @@ class JoyToServoPub(Node):
         self.collision_pub_thread = threading.Thread(target=self.publish_collision_scene)
         self.collision_pub_thread.start()
 
-    def convert_joy_to_gripper_cmd(self, buttons, goal : GripperCommand.Goal):
-        val_pos = 0.0005 * (buttons[Button.RIGHT_BUMPER])
-        val_neg = -0.0005 * (buttons[Button.LEFT_BUMPER])
+    def convert_joy_to_gripper_cmd(self, msg : Joy, goal : GripperCommand.Goal):
+        val_pos = self.get_gamepad_property("gripper_velocity_multiplier") * self.get_btn_axis(msg, "gripper_open")
+        val_neg = -self.get_gamepad_property("gripper_velocity_multiplier") * self.get_btn_axis(msg, "gripper_close")
         self.gripper += val_pos + val_neg
-        if self.gripper >= GRIPPER_MAX or self.gripper <= 0.0:
+        if self.gripper >= self.get_robot_property("gripper.max_opening") or self.gripper <= self.get_robot_property("gripper.min_opening"):
             return
 
         goal.command.position = self.gripper
@@ -142,7 +212,7 @@ class JoyToServoPub(Node):
         time.sleep(3)
 
         collision_object = CollisionObject()
-        collision_object.header.frame_id = BASE_FRAME_ID
+        collision_object.header.frame_id = self.get_robot_property("base_frame")
         collision_object.id = "box"
 
         table_1 = SolidPrimitive()
@@ -183,15 +253,15 @@ class JoyToServoPub(Node):
         joint_msg.header.frame_id = self.frame_to_publish
 
         # Change mode
-        if msg.buttons[Button.Y]:
+        if self.get_btn_axis(msg, "mode_idle"):
             self.mode = ControllerMode.IDLE
             self.get_logger().info("Mode changed to: {}".format(self.mode))
             return
-        elif msg.buttons[Button.B]:
+        elif self.get_btn_axis(msg, "mode_joint"):
             self.mode = ControllerMode.JOINT
             self.get_logger().info("Mode changed to: {}".format(self.mode))
             return
-        elif msg.buttons[Button.A]:
+        elif self.get_btn_axis(msg, "mode_cartesian"):
             self.mode = ControllerMode.CARTESIAN
             self.get_logger().info("Mode changed to: {}".format(self.mode))
             return
@@ -199,16 +269,16 @@ class JoyToServoPub(Node):
         if self.mode == ControllerMode.IDLE: # Do nothing if mode is IDLE
             pass
         elif self.mode == ControllerMode.JOINT: # Control joint velocities if mode is JOINT
-            convert_joy_to_joint_cmd(msg.axes, msg.buttons, joint_msg)
+            self.convert_joy_to_joint_cmd(msg, joint_msg)
             self.joint_pub.publish(joint_msg)
         elif self.mode == ControllerMode.CARTESIAN: # Control linear and angular velocities if mode is CARTESIAN
-            convert_joy_to_cartesian_cmd(msg.axes, msg.buttons, twist_msg)
+            self.convert_joy_to_cartesian_cmd(msg, twist_msg)
             self.twist_pub.publish(twist_msg)
 
         # Control gripper
-        if msg.buttons[Button.RIGHT_BUMPER] or msg.buttons[Button.LEFT_BUMPER]:
+        if self.get_btn_axis(msg, "gripper_open") or self.get_btn_axis(msg, "gripper_close"):
             gripper_goal = GripperCommand.Goal()
-            self.convert_joy_to_gripper_cmd(msg.buttons, gripper_goal)
+            self.convert_joy_to_gripper_cmd(msg, gripper_goal)
         
         return
 
