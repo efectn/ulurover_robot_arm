@@ -45,6 +45,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+CRC_HandleTypeDef hcrc;
+
 UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_rx;
 
@@ -87,12 +89,21 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_CRC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+// This magic CRC32 function is necessary to match the CRC32 calculation of ZLIB
+// from https://techoverflow.net/2024/08/13/how-to-configure-stm32h7-hardware-crc-to-match-zlib-crc32-in-python/
+uint32_t CalculateCRC32(uint8_t *data, size_t length)
+{
+  uint32_t crc_result = HAL_CRC_Calculate(&hcrc, (uint32_t *)data, length);
+  return crc_result ^ 0xFFFFFFFF;
+}
 
 /* USER CODE END 0 */
 
@@ -127,8 +138,10 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART2_UART_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
 
+  // Start UART DMA communication
   HAL_UARTEx_ReceiveToIdle_DMA(&huart2, UART2RxBuffer, UART2RxBufferSize);
   __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT); // Disable Half Transfer interrupt
 
@@ -166,7 +179,16 @@ int main(void)
 
       const uint8_t *payload = &DataFramaBuffer[3];
 
-      // TODO: CRC32 check.
+      // Check CRC32 of payload
+      uint32_t crc = (uint32_t)(DataFramaBuffer[DataFrameLen - 5]) << 24 | (uint32_t)(DataFramaBuffer[DataFrameLen - 4]) << 16 | (uint32_t)(DataFramaBuffer[DataFrameLen - 3]) << 8 | (uint32_t)(DataFramaBuffer[DataFrameLen - 2]);
+      uint32_t crc_calculated = CalculateCRC32(payload, payload_len);
+
+      if (crc != crc_calculated)
+      {
+        HAL_UART_Transmit(&huart2, (uint8_t *)"CRC Error\n", strlen("CRC Error\n"), 1000);
+        // Invalid data frame
+        continue;
+      }
 
       int field_count = 0;
       size_t i = 0;
@@ -234,8 +256,9 @@ int main(void)
       free(names);
       free(values);
     }
-    /* USER CODE END 3 */
+    /* USER CODE BEGIN 3 */
   }
+  /* USER CODE END 3 */
 }
 
 /**
@@ -284,6 +307,36 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+ * @brief CRC Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  hcrc.Init.DefaultPolynomialUse = DEFAULT_POLYNOMIAL_ENABLE;
+  hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_ENABLE;
+  hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_BYTE;
+  hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_ENABLE;
+  hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
 }
 
 /**
