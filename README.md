@@ -8,6 +8,7 @@
 - **panda_moveit_config:** Launch files and controllers of robotical arm which was generated using moveit_servo.
 - **moveit_servo:** Fork of moveit_servo package for ROS2 Humble.
 - **panda_servo_control:** Joy/keyboard teleop controller for the robotical arm.
+- **panda_hardware_interface:** An hardware interface to sent joint states to microcontroller using UART communication.
 
 ## To-Do List
 
@@ -25,7 +26,7 @@
     - [x] Gripper control.
 - [x] Test robo arm controls with obstacles.
 - [ ] Gazebo simulations for the tasks.
-- [ ] Create hardware communication flow using micro-ROS over UART.
+- [x] Create hardware communication flow using UART with custom, simple protocol.
 - [ ] Integrate real robotical arm of Ulurover to test with hardware.
 - [ ] Integrate [IKFast](https://moveit.picknik.ai/humble/doc/examples/ikfast/ikfast_tutorial.html) kinematics solver plugin.
 - [ ] Create PWM motor drivers for STM32.
