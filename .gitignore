@@ -3,3 +3,6 @@ install/*
 log/*
 .vscode/*
 hello_moveit/*
+stm32_firmware/Drivers/*
+stm32_firmware/.vscode/*
+stm32_firmware/build/*

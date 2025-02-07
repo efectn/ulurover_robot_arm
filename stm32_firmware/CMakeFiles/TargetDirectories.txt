@@ -1,0 +1,5 @@
+/home/efectn/robo_arm_v2/stm32_firmware/CMakeFiles/stm32_firmware.dir
+/home/efectn/robo_arm_v2/stm32_firmware/CMakeFiles/edit_cache.dir
+/home/efectn/robo_arm_v2/stm32_firmware/CMakeFiles/rebuild_cache.dir
+/home/efectn/robo_arm_v2/stm32_firmware/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+/home/efectn/robo_arm_v2/stm32_firmware/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
