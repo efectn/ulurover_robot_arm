@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  ros-dev:
+    image: osrf/ros:humble-desktop-full
+    container_name: ros2_humble_dev
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=0 
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix 
+      - .:/root/ros_ws 
+      - /dev/dri:/dev/dri
+      - /dev/shm:/dev/shm
+      - /dev/input:/dev/input
+      - /dev/bus/usb:/dev/bus/usb
+      - /dev/snd:/dev/snd
+    network_mode: "host"
+    stdin_open: true
+    tty: true
+    command: /bin/bash
